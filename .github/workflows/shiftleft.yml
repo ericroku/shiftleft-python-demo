@@ -1,56 +1,40 @@
----
-# This workflow integrates qwiet.ai preZero with GitHub
+# This workflow integrates Qwiet preZero with GitHub
+# ... ....
 # Visit https://docs.shiftleft.io for help
-name: qwiet.ai
+name: Qwiet
 
 on:
   pull_request:
   workflow_dispatch:
-
+  push:
+    # We recommend triggering a scan when merging to your default branch
+    # as a best practice, especially if you'd like to compare the results
+    # of two scans (e.g., a feature branch against the default branch)
+    branches:
+      - main
+      - master
 jobs:
-  NextGen-Static-Analysis:
-    runs-on: ubuntu-latest
+  ngsast-build:
+    runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v3
-    - name: Download ShiftLeft CLI
+    - uses: actions/checkout@v2
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '1.17'
+    - name: Build
+      run: |
+        go build ./...
+    - name: Download the Qwiet CLI and set permissions
       run: |
         curl https://cdn.shiftleft.io/download/sl > ${GITHUB_WORKSPACE}/sl && chmod a+rx ${GITHUB_WORKSPACE}/sl
 
-    - name: preZero Static Analysis
-      run: |
-        pip install -r requirements.txt
+    # Qwiet requires Java 1.8
+    - name: Set up Java
+      uses: actions/setup-java@v1.4.3
+      with:
+        java-version: 1.8
 
-        ${GITHUB_WORKSPACE}/sl --version
-        ${GITHUB_WORKSPACE}/sl analyze --strict --wait \
-          --app shiftleft-python-demo-GH-ericroku \
-          --tag branch=${{ github.head_ref }} \
-           --container 18fgsa/s3-resource $(pwd)
+    - name: Analyze application with Qwiet
+      run: ${GITHUB_WORKSPACE}/sl analyze --app qwiet-go-demo-ericroku-GH --tag branch=${{ github.head_ref || steps.extract_branch.outputs.branch }} $(pwd)
       env:
         SHIFTLEFT_ACCESS_TOKEN: ${{ secrets.SHIFTLEFT_ACCESS_TOKEN }}
-        SHIFTLEFT_API_HOST: www.shiftleft.io
-        SHIFTLEFT_GRPC_TELEMETRY_HOST: telemetry.shiftleft.io:443
-        SHIFTLEFT_GRPC_API_HOST: api.shiftleft.io:443
-
-  Build-Rules:
-    runs-on: ubuntu-latest
-    permissions: write-all
-    needs: NextGen-Static-Analysis
-    steps:
-    - uses: actions/checkout@v3
-    - name: Download ShiftLeft CLI
-      run: |
-        curl https://cdn.shiftleft.io/download/sl > ${GITHUB_WORKSPACE}/sl && chmod a+rx ${GITHUB_WORKSPACE}/sl
-    - name: Validate Build Rules
-      run: |
-        ${GITHUB_WORKSPACE}/sl check-analysis --app shiftleft-python-demo-GH-ericroku \
-            --github-pr-number=${{github.event.number}} \
-            --github-pr-user=${{ github.repository_owner }} \
-            --github-pr-repo=${{ github.event.repository.name }} \
-            --github-token=${{ secrets.GITHUB_TOKEN }}
-      env:
-        SHIFTLEFT_ACCESS_TOKEN: ${{ secrets.SHIFTLEFT_ACCESS_TOKEN }}
-        SHIFTLEFT_API_HOST: www.shiftleft.io
-        SHIFTLEFT_GRPC_TELEMETRY_HOST: telemetry.shiftleft.io:443
-        SHIFTLEFT_GRPC_API_HOST: api.shiftleft.io:443
-
-
